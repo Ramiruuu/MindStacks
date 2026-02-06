@@ -62,22 +62,36 @@ export const FlashcardEditor: React.FC = () => {
     if (!content.trim()) return alert('Paste text or upload files first');
     setLoading(true);
 
-    // Split content into paragraphs and generate questions per segment
-    const segments = content.split(/\n{2,}/).map(s => s.trim()).filter(s => s.length > 20);
-    const results: any[] = [];
-    for (const seg of segments) {
-      for (let i = 0; i < countPerSource; i++) {
-        const qs = AIService.generateQuestions(seg, questionType);
-        for (const q of qs) {
-          results.push({ ...q, difficulty, source: seg });
+    // Check if content contains pre-defined Q&A pairs
+    const existingPairs = AIService.parseExistingQAPairs(content);
+    let results: any[] = [];
+
+    if (existingPairs.length > 0) {
+      // Use the pre-defined Q&A pairs
+      results = existingPairs.map(pair => ({
+        type: 'predefined',
+        question: pair.question,
+        answer: pair.answer,
+        difficulty,
+        source: content,
+      }));
+    } else {
+      // Generate new questions from content
+      const segments = content.split(/\n{2,}/).map(s => s.trim()).filter(s => s.length > 20);
+      for (const seg of segments) {
+        for (let i = 0; i < countPerSource; i++) {
+          const qs = AIService.generateQuestions(seg, questionType);
+          for (const q of qs) {
+            results.push({ ...q, difficulty, source: seg });
+          }
         }
       }
-    }
 
-    // If no segments, run once on full content
-    if (results.length === 0) {
-      const qs = AIService.generateQuestions(content, questionType);
-      for (const q of qs) results.push({ ...q, difficulty, source: content });
+      // If no segments, run once on full content
+      if (results.length === 0) {
+        const qs = AIService.generateQuestions(content, questionType);
+        for (const q of qs) results.push({ ...q, difficulty, source: content });
+      }
     }
 
     setGenerated(results);
@@ -200,7 +214,7 @@ export const FlashcardEditor: React.FC = () => {
         <div className="mb-3 border rounded-lg p-4 bg-blue-50 dark:bg-blue-900 border-blue-200 dark:border-blue-700">
           <div className="flex items-center justify-between mb-4">
             <div className="text-sm font-semibold text-blue-900 dark:text-blue-100">
-              📚 Generated {generated.length} Questions ({difficulty})
+              📚 {generated[0]?.type === 'predefined' ? '✅ Extracted' : '✨ Generated'} {generated.length} Questions ({difficulty})
             </div>
             <button
               onClick={handleAddAll}
@@ -216,7 +230,7 @@ export const FlashcardEditor: React.FC = () => {
                 className="p-3 border-l-4 border-indigo-500 rounded bg-white dark:bg-gray-800 shadow-sm"
               >
                 <div className="font-medium text-xs text-indigo-700 dark:text-indigo-300 uppercase">
-                  {g.type}
+                  {g.type === 'predefined' ? 'From Content' : g.type}
                 </div>
                 <div className="text-sm mt-1 font-medium text-gray-900 dark:text-white">
                   Q: {String(g.question)}

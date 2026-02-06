@@ -8,6 +8,41 @@ import type { AIGeneratedQuestion } from '../types';
 
 export class AIService {
   /**
+   * Parse existing Q&A pairs from content
+   * Supports formats like:
+   * - "Q: Question? A: Answer"
+   * - "Question?\nAnswer"
+   * - "Q1. Question?\nA1. Answer"
+   */
+  static parseExistingQAPairs(content: string): { question: string; answer: string }[] {
+    const pairs: { question: string; answer: string }[] = [];
+    
+    // Pattern 1: "Q: ... A: ..." on same or adjacent lines
+    const qaPattern1 = /Q:\s*(.+?)(?:\n|\s+)A:\s*(.+?)(?=\n|$)/gi;
+    let match;
+    while ((match = qaPattern1.exec(content)) !== null) {
+      const q = match[1].trim();
+      const a = match[2].trim();
+      if (q.length > 5 && a.length > 2) {
+        pairs.push({ question: q, answer: a });
+      }
+    }
+
+    // Pattern 2: "Question?\nAnswer" (question on one line, answer on next)
+    const lines = content.split('\n').map(l => l.trim()).filter(l => l.length > 0);
+    for (let i = 0; i < lines.length - 1; i++) {
+      const current = lines[i];
+      const next = lines[i + 1];
+      // If current line ends with ? and next line doesn't, likely a Q&A pair
+      if (current.endsWith('?') && !next.endsWith('?') && next.length > 2 && next.length < 200 && !next.toLowerCase().startsWith('what') && !next.toLowerCase().startsWith('which')) {
+        pairs.push({ question: current, answer: next });
+      }
+    }
+
+    return pairs;
+  }
+
+  /**
    * Generate questions from content using rule-based approach
    */
   static generateQuestions(content: string, format: 'auto' | 'multiple-choice' | 'true-false' | 'fill-blank' | 'enumeration' = 'auto'): AIGeneratedQuestion[] {
