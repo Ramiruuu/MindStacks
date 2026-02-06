@@ -10,8 +10,26 @@ export const FlashcardEditor: React.FC = () => {
   const [loading, setLoading] = useState(false);
   const [generated, setGenerated] = useState<any[]>([]);
   const [difficulty, setDifficulty] = useState<'easy'|'medium'|'hard'>('medium');
+  const [questionType, setQuestionType] = useState<'auto'|'multiple-choice'|'true-false'|'fill-blank'|'enumeration'>('auto');
   const [countPerSource, setCountPerSource] = useState<number>(3);
   const fileRef = useRef<HTMLInputElement | null>(null);
+
+  // Extract key topic/subject from content for deck naming
+  const extractTopicFromContent = (text: string): string => {
+    const lines = text.split('\n').filter(l => l.trim().length > 0);
+    if (lines.length === 0) return 'Study Set';
+    
+    // Try to find capitalized words (likely topic names)
+    const firstLine = lines[0];
+    const capitalizedWords = firstLine.match(/\b[A-Z][a-z]+(?:\s+[A-Z][a-z]+)*/g);
+    if (capitalizedWords && capitalizedWords.length > 0) {
+      return capitalizedWords[0];
+    }
+
+    // Fallback: use first meaningful word(s)
+    const words = firstLine.split(/\s+/).filter(w => w.length > 3);
+    return words.slice(0, 2).join(' ') || 'Study Set';
+  };
 
   // Read uploaded files (text-based only; convert PDFs to text first)
   const readFileAsText = (file: File): Promise<string> => {
@@ -49,7 +67,7 @@ export const FlashcardEditor: React.FC = () => {
     const results: any[] = [];
     for (const seg of segments) {
       for (let i = 0; i < countPerSource; i++) {
-        const qs = AIService.generateQuestions(seg, 'auto');
+        const qs = AIService.generateQuestions(seg, questionType);
         for (const q of qs) {
           results.push({ ...q, difficulty, source: seg });
         }
@@ -58,7 +76,7 @@ export const FlashcardEditor: React.FC = () => {
 
     // If no segments, run once on full content
     if (results.length === 0) {
-      const qs = AIService.generateQuestions(content, 'auto');
+      const qs = AIService.generateQuestions(content, questionType);
       for (const q of qs) results.push({ ...q, difficulty, source: content });
     }
 
@@ -69,10 +87,11 @@ export const FlashcardEditor: React.FC = () => {
   const handleAddAll = () => {
     if (generated.length === 0) return alert('Generate questions first');
     
-    // Auto-create a new deck
+    // Auto-create deck with smart topic-based name
     const createDeck = useAppStore(s => s.createDeck);
-    const deckName = `Study Set - ${new Date().toLocaleDateString()}`;
-    const newDeck = createDeck(deckName, 'Auto-generated from text content', 'Generated');
+    const detectedTopic = extractTopicFromContent(content);
+    const deckName = detectedTopic;
+    const newDeck = createDeck(deckName, `Study questions on ${detectedTopic}`, 'Generated');
     const deckId = newDeck.id;
 
     for (const g of generated) {
@@ -84,7 +103,7 @@ export const FlashcardEditor: React.FC = () => {
       addFlashcard(deckId, qText, aText || '', diff);
     }
     loadFlashcards(deckId);
-    alert(`✓ Created new deck "${deckName}" with ${generated.length} cards!`);
+    alert(`✓ Created "${deckName}" folder with ${generated.length} study cards!`);
     setGenerated([]);
     setContent('');
   };
@@ -128,6 +147,21 @@ export const FlashcardEditor: React.FC = () => {
             <option value="easy">Easy</option>
             <option value="medium">Medium</option>
             <option value="hard">Hard</option>
+          </select>
+        </div>
+
+        <div className="flex items-center gap-2">
+          <label className="text-sm font-medium">Question Type:</label>
+          <select
+            value={questionType}
+            onChange={e => setQuestionType(e.target.value as any)}
+            className="px-3 py-1 rounded border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-900 text-sm"
+          >
+            <option value="auto">Random (Auto)</option>
+            <option value="multiple-choice">Multiple Choice</option>
+            <option value="true-false">True/False</option>
+            <option value="fill-blank">Fill in Blank</option>
+            <option value="enumeration">Enumeration</option>
           </select>
         </div>
 
